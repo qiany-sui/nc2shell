@@ -1,0 +1,53 @@
+# 构建产物与本地验证记录
+.build/
+.swiftpm/
+dist/
+work/
+*.app/
+*.dSYM/
+*.xcresult/
+*.dmg
+*.pkg
+*.zip
+*.log
+
+# 本机 IDE、系统及助手状态
+.DS_Store
+.idea/
+.vscode/
+*.code-workspace
+xcuserdata/
+*.xcuserstate
+/.codex/
+/.agents/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 凭据、签名材料与本地环境；示例配置也需检查后再纳入
+.env
+.env.*
+.ssh/
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.mobileprovision
+*.keychain
+*.keychain-db
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+known_hosts*
+authorized_keys*
+
+# 用户运行数据即使误拷进项目，也不能随源码提交
+connections.json
+terminal-settings.json
+transfer-settings.json
+remote-directory-bookmarks.json
+transfer-recovery/
+.nc2shell-*
