@@ -242,7 +242,8 @@ public final class TransferCheckpoint: @unchecked Sendable {
     }
 
     private func readData() throws -> Data? {
-        let fd = Darwin.open(fileURL.path, O_RDONLY | O_NOFOLLOW)
+        // 非阻塞打开后再检查类型，避免路径被替换成 FIFO 时阻塞在 open。
+        let fd = Darwin.open(fileURL.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
         if fd < 0 {
             if errno == ENOENT { return nil }
             throw SFTPError.message("无法读取续传检查点：\(fileURL.path)")

@@ -144,6 +144,12 @@ final class AppModel: ObservableObject {
                 }
             } else if profile.rememberPassword {
                 temporaryPasswords[profile.id] = nil
+                if replacingPassword, let password {
+                    // 旧临时密码标签仍按原认证方式重连，不能让其快照遮蔽新保存的密码。
+                    for session in sessions where session.profile.hasSameCredentialAccount(as: profile) && session.temporaryPassword != nil {
+                        session.temporaryPassword = password
+                    }
+                }
             } else if replacingPassword, let password {
                 temporaryPasswords[profile.id] = (profile, password)
                 // 修正密码后，原账户的旧标签下次重连也应使用新值；在途认证仍持有自己的快照。

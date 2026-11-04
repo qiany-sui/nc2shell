@@ -68,6 +68,49 @@ final class RemotePermissionsIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testPermissionWriteAcceptsListingWithoutSizeOrModificationTime() async throws {
+        let (session, client, root) = try await connected()
+        defer { client.cancel(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("nc2-permissions-partial-listing")
+        try Data([1, 2, 3]).write(to: file)
+        XCTAssertEqual(chmod(file.path, 0o640), 0)
+        let selected = try await item(client, file)
+        XCTAssertFalse(selected.hasSize)
+        XCTAssertNil(selected.modifiedTime)
+
+        try await client.setPermissions(selected, in: root.path, permissions: 0o604)
+
+        XCTAssertEqual(try mode(file), 0o604)
+        XCTAssertEqual(try Data(contentsOf: file), Data([1, 2, 3]))
+    }
+
+    @MainActor
+    func testPermissionWriteRejectsChangedKnownSizeOrModificationTime() async throws {
+        let (session, client, root) = try await connected()
+        defer { client.cancel(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
+        let originalTime = Date(timeIntervalSince1970: 1_700_000_000)
+        for sizeChanged in [true, false] {
+            let file = root.appendingPathComponent(sizeChanged ? "changed-size" : "changed-mtime")
+            try Data([1]).write(to: file)
+            XCTAssertEqual(chmod(file.path, 0o600), 0)
+            try FileManager.default.setAttributes([.modificationDate: originalTime], ofItemAtPath: file.path)
+            let selected = try await item(client, file)
+            XCTAssertTrue(selected.hasSize)
+            XCTAssertEqual(selected.size, 1)
+            XCTAssertEqual(selected.modifiedTime, 1_700_000_000)
+
+            if sizeChanged { try Data([1, 2]).write(to: file) }
+            let modifiedTime = sizeChanged ? originalTime : originalTime.addingTimeInterval(60)
+            try FileManager.default.setAttributes([.modificationDate: modifiedTime], ofItemAtPath: file.path)
+            do {
+                try await client.setPermissions(selected, in: root.path, permissions: 0o644)
+                XCTFail("选择时已知的属性变化必须拒绝")
+            } catch { XCTAssertTrue(error.localizedDescription.contains("远程项目已变化")) }
+            XCTAssertEqual(try mode(file), 0o600)
+        }
+    }
+
+    @MainActor
     func testInvalidInputChangedSnapshotAndSymbolicAliasCannotChangePermissions() async throws {
         let (session, client, root) = try await connected()
         defer { client.cancel(); session.disconnect(); try? FileManager.default.removeItem(at: root) }

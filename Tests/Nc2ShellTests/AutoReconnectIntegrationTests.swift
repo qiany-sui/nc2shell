@@ -48,7 +48,7 @@ final class AutoReconnectIntegrationTests: XCTestCase {
         try await eventually { self.output(session).contains("BEFORE_DROP") }
         let source = root.appendingPathComponent("unfinished-\(UUID()).bin")
         try Data(repeating: 1, count: 1_048_576).write(to: source)
-        session.files.upload([source], expectedPath: session.files.path, connectionID: session.files.connectionID)
+        session.files.upload([source], expectedPath: session.files.path, connectionID: session.files.connectionID, revision: session.files.locationRevision)
         let task = try XCTUnwrap(session.files.transferItems.first)
         session.files.pauseTransfer(task.id)
         try Data().write(to: trigger)

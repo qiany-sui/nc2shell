@@ -25,7 +25,7 @@ final class TransferPresentationIntegrationTests: XCTestCase {
         try await eventually { files.canTransfer && files.path == root.appendingPathComponent("remote").path }
         let source = root.appendingPathComponent("source")
         try Data([1, 2, 3]).write(to: source)
-        files.upload([source], expectedPath: files.path, connectionID: files.connectionID)
+        files.upload([source], expectedPath: files.path, connectionID: files.connectionID, revision: files.locationRevision)
         let item = try XCTUnwrap(files.transferItems.first)
         var notifications = 0
         let observer = presentation.objectWillChange.sink { notifications += 1 }
@@ -37,10 +37,10 @@ final class TransferPresentationIntegrationTests: XCTestCase {
         try await eventually { item.state.isFinished && files.canTransfer }
         XCTAssertTrue(presentation.active.isEmpty)
         XCTAssertEqual(presentation.attention.map(\.id), [item.id])
-        files.upload([source], expectedPath: files.path, connectionID: files.connectionID)
+        files.upload([source], expectedPath: files.path, connectionID: files.connectionID, revision: files.locationRevision)
         try await eventually { files.canTransfer }
         XCTAssertEqual(presentation.completed.count, 1)
-        files.upload([root.appendingPathComponent("missing")], expectedPath: files.path, connectionID: files.connectionID)
+        files.upload([root.appendingPathComponent("missing")], expectedPath: files.path, connectionID: files.connectionID, revision: files.locationRevision)
         try await eventually { files.canTransfer }
         XCTAssertEqual(presentation.attention.count, 2)
         files.clearCompletedTransfers()

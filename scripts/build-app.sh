@@ -23,6 +23,7 @@ contents = app / "Contents"
 shutil.copy2(binary_dir / "Nc2Shell", contents / "MacOS/Nc2Shell")
 for resource in binary_dir.glob("*.bundle"):
     shutil.copytree(resource, contents / "Resources" / resource.name, dirs_exist_ok=True)
+shutil.copy2(root / "LICENSE", contents / "Resources/LICENSE")
 shutil.copy2(root / ".build/checkouts/SwiftTerm/LICENSE", contents / "Resources/ThirdParty/SwiftTerm-LICENSE.txt")
 shutil.copy2(root / "Assets/AppIcon-A-Refined.icns", contents / "Resources/AppIcon.icns")
 info = {

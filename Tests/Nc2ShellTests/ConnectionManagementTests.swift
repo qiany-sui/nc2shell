@@ -4,6 +4,48 @@ import Nc2ShellCore
 
 final class ConnectionManagementTests: XCTestCase {
     @MainActor
+    func testRememberingReplacementPasswordUpdatesExistingSessionsOnlyAfterSave() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let credentials = MemoryCredentials()
+        let store = ConnectionStore(fileURL: root.appendingPathComponent("connections.json"))
+        let model = AppModel(store: store, settingsStore: .init(fileURL: root.appendingPathComponent("settings.json")),
+                             credentials: credentials, sessionFactory: { profile in
+            TerminalSession(profile: profile, directoryBookmarks: self.makeTestDirectoryBookmarks()) { _, _ in
+                throw ProfileError("隔离测试不启动网络")
+            }
+        })
+        var profile = ConnectionProfile(name: "Password switch", host: "example.test", username: "test")
+        let other = ConnectionProfile(name: "Other", host: "example.test", username: "test")
+        model.save(profile, password: "old-fixture")
+        model.save(other, password: "other-fixture")
+        let first = model.connect(profile), second = model.connect(profile), unrelated = model.connect(other)
+        let original = try Data(contentsOf: store.fileURL)
+        profile.rememberPassword = true
+        try Data("corrupt".utf8).write(to: store.fileURL)
+        model.save(profile, password: "new-fixture")
+        XCTAssertNotNil(model.errorMessage)
+        XCTAssertEqual(first.temporaryPassword, "old-fixture")
+        XCTAssertNil(try credentials.password(for: profile))
+
+        try original.write(to: store.fileURL)
+        model.errorMessage = nil
+        model.save(profile, password: "new-fixture")
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(first.temporaryPassword, "new-fixture")
+        XCTAssertEqual(second.temporaryPassword, "new-fixture")
+        XCTAssertEqual(unrelated.temporaryPassword, "other-fixture")
+        XCTAssertFalse(model.hasTemporaryPassword(for: profile))
+        XCTAssertEqual(try credentials.password(for: profile), "new-fixture")
+        let remembered = model.connect(profile)
+        XCTAssertNil(remembered.temporaryPassword)
+        model.save(profile, password: "latest-fixture")
+        XCTAssertEqual(first.temporaryPassword, "latest-fixture")
+        XCTAssertEqual(second.temporaryPassword, "latest-fixture")
+        XCTAssertNil(remembered.temporaryPassword, "原本使用钥匙串的标签继续按实际提示读取凭据")
+    }
+
+    @MainActor
     func testCloseConnectionsMatchesProfileIDAndRemovesAllTabsAndPanes() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

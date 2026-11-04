@@ -198,7 +198,7 @@ final class SSHIntegrationTests: XCTestCase {
         let small = sources.appendingPathComponent("small-\(UUID()).bin")
         try Data(repeating: 19, count: 65_537).write(to: small)
         session.files.setFollowing(true)
-        session.files.upload([small], expectedPath: session.files.path, connectionID: session.files.connectionID)
+        session.files.upload([small], expectedPath: session.files.path, connectionID: session.files.connectionID, revision: session.files.locationRevision)
         XCTAssertTrue(session.files.isTransferring)
         let queued = sources.appendingPathComponent("queued-\(UUID()).bin")
         try Data(repeating: 21, count: 65_537).write(to: queued)
@@ -215,7 +215,7 @@ final class SSHIntegrationTests: XCTestCase {
 
         let paused = sources.appendingPathComponent("paused-\(UUID()).bin")
         try Data([1, 2, 3]).write(to: paused)
-        session.files.upload([paused], expectedPath: session.files.path, connectionID: session.files.connectionID)
+        session.files.upload([paused], expectedPath: session.files.path, connectionID: session.files.connectionID, revision: session.files.locationRevision)
         session.files.follow(fixture.directory + "/My Files")
         session.files.setFollowing(false)
         try await eventually { !session.files.isTransferring && !session.files.isLoading }
@@ -223,7 +223,7 @@ final class SSHIntegrationTests: XCTestCase {
 
         let large = sources.appendingPathComponent("large-\(UUID()).bin")
         try Data(repeating: 23, count: 20 * 1_048_576).write(to: large)
-        session.files.upload([large], expectedPath: session.files.path, connectionID: session.files.connectionID)
+        session.files.upload([large], expectedPath: session.files.path, connectionID: session.files.connectionID, revision: session.files.locationRevision)
         try await eventually { session.files.transferredBytes > 0 }
         XCTAssertTrue(session.files.isTransferring)
         session.disconnect()
@@ -413,7 +413,7 @@ final class SSHIntegrationTests: XCTestCase {
         session.files.refresh(); try await eventually { session.files.canTransfer }
         let selected = try names.map { name in try XCTUnwrap(session.files.files.first { $0.name == name }) }
         XCTAssertTrue(session.files.canDownload(selected))
-        session.files.download(selected, into: destination, expectedPath: session.files.path, connectionID: session.files.connectionID)
+        session.files.download(selected, into: destination, expectedPath: session.files.path, connectionID: session.files.connectionID, revision: session.files.locationRevision)
         XCTAssertTrue(session.files.isTransferring)
         session.files.follow(fixture.directory + "/My Files")
         try await eventually { session.files.canTransfer && session.files.path.hasSuffix("/My Files") }
@@ -443,21 +443,21 @@ final class SSHIntegrationTests: XCTestCase {
         XCTAssertEqual(link.kind, .symbolicLink)
         let invalid = [file, link]
         XCTAssertFalse(session.files.canDownload(invalid))
-        session.files.download(invalid, into: destination, expectedPath: path, connectionID: connection)
+        session.files.download(invalid, into: destination, expectedPath: path, connectionID: connection, revision: session.files.locationRevision)
         XCTAssertFalse(session.files.isTransferring); XCTAssertNotNil(session.files.error)
-        session.files.download([RemoteFile(name: "../escape", size: 0, mode: 0o100600)], into: destination, expectedPath: path, connectionID: connection)
+        session.files.download([RemoteFile(name: "../escape", size: 0, mode: 0o100600)], into: destination, expectedPath: path, connectionID: connection, revision: session.files.locationRevision)
         XCTAssertFalse(session.files.isTransferring)
         session.files.browse(fixture.directory + "/My Files")
         try await eventually { session.files.canTransfer }
-        session.files.download([file], into: destination, expectedPath: path, connectionID: connection)
+        session.files.download([file], into: destination, expectedPath: path, connectionID: connection, revision: session.files.locationRevision)
         XCTAssertTrue(session.files.error?.contains("目录或连接已变化") == true)
         session.files.browse(path); try await eventually { session.files.canTransfer }
         XCTAssertTrue(session.files.uploadDroppedItems([fileDropProvider(base.appendingPathComponent("unused"), delay: 0.5)]))
-        session.files.download([file], into: destination, expectedPath: path, connectionID: connection)
+        session.files.download([file], into: destination, expectedPath: path, connectionID: connection, revision: session.files.locationRevision)
         XCTAssertTrue(session.files.error?.contains("正在") == true)
         session.disconnect(); try await eventually { !session.isRunning }; session.start()
         try await eventually { session.files.canTransfer }
-        session.files.download([file], into: destination, expectedPath: path, connectionID: connection)
+        session.files.download([file], into: destination, expectedPath: path, connectionID: connection, revision: session.files.locationRevision)
         XCTAssertTrue(session.files.error?.contains("目录或连接已变化") == true)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: destination.path).isEmpty)
         XCTAssertFalse(session.files.isTransferring)
@@ -480,7 +480,7 @@ final class SSHIntegrationTests: XCTestCase {
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
             let existing = Data("不能覆盖".utf8)
             if !cancel { try existing.write(to: destination.appendingPathComponent(names[1])) }
-            session.files.download(selected, into: destination, expectedPath: session.files.path, connectionID: session.files.connectionID)
+            session.files.download(selected, into: destination, expectedPath: session.files.path, connectionID: session.files.connectionID, revision: session.files.locationRevision)
             if cancel {
                 try await eventually { session.files.message?.contains("2/3") == true && session.files.transferredBytes > 0 }
                 session.files.cancelTransfer()
@@ -714,7 +714,7 @@ final class SSHIntegrationTests: XCTestCase {
         let snapshotID = session.files.connectionID
         let target = URL(fileURLWithPath: fixture.directory).appendingPathComponent("must-not-download")
         session.files.download(RemoteFile(name: "anything", size: 0, mode: 0o100600), to: target,
-                               expectedPath: fixture.directory + "/My Files", connectionID: snapshotID)
+                               expectedPath: fixture.directory + "/My Files", connectionID: snapshotID, revision: session.files.locationRevision)
         XCTAssertTrue(session.files.error?.contains("目录或连接已变化") == true)
         XCTAssertFalse(session.files.isTransferring)
         XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))

@@ -135,7 +135,9 @@ public final class SFTPClient: @unchecked Sendable {
         try await perform {
             try self.requireDirectory(directory)
             let path = RemoteFile.join(directory, file.name)
-            guard try self.stat(path) == file else { throw SFTPError.message("远程项目已变化，请刷新后重新确认：\(path)") }
+            guard try self.matchesSelectedAttributes(file, current: self.stat(path)) else {
+                throw SFTPError.message("远程项目已变化，请刷新后重新确认：\(path)")
+            }
             guard mode != file.mode & 0o7777 else { return }
             var body = SFTPWriter(); body.text(path); body.uint32(4); body.uint32(mode)
             do {
@@ -536,6 +538,13 @@ public final class SFTPClient: @unchecked Sendable {
         guard try stat(path).kind == file.kind else { throw SFTPError.message("远程项目类型已变化，请刷新后重试。") }
     }
 
+    private func matchesSelectedAttributes(_ selected: RemoteFile, current: RemoteFile) -> Bool {
+        // READDIR 可以缺少可选属性，只比较用户选择时实际已知的值。
+        current.mode == selected.mode &&
+            (!selected.hasSize || (current.hasSize && current.size == selected.size)) &&
+            (selected.modifiedTime == nil || current.modifiedTime == selected.modifiedTime)
+    }
+
     private func deleteTree(_ path: String, depth: Int) throws {
         try checkCancellation()
         guard depth < 64 else { throw SFTPError.message("文件夹嵌套超过 64 层。") }
@@ -776,9 +785,7 @@ public final class SFTPClient: @unchecked Sendable {
             let source = RemoteFile.join(directory, file.name), target = RemoteFile.join(destination, file.name)
             try self.requireDirectory(destination)
             let current = try self.stat(source)
-            // READDIR 可以缺少可选属性，只比较用户选择时实际已知的值。
-            guard current.mode == file.mode, (!file.hasSize || (current.hasSize && current.size == file.size)),
-                  file.modifiedTime == nil || current.modifiedTime == file.modifiedTime else {
+            guard self.matchesSelectedAttributes(file, current: current) else {
                 throw SFTPError.message("来源项目已变化，请刷新后重试：\(source)")
             }
             try self.requireTransferable(file, at: source)

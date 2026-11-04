@@ -33,7 +33,7 @@ final class TransferRecoveryIntegrationTests: XCTestCase {
         try Data("one".utf8).write(to: a)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         try Data("nested".utf8).write(to: directory.appendingPathComponent("二.txt"))
-        model.upload([a, directory], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([a, directory], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let item = try XCTUnwrap(model.transferItems.first)
         model.pauseTransfer(item.id)
         let record = try XCTUnwrap(manager.records.first)
@@ -63,7 +63,7 @@ final class TransferRecoveryIntegrationTests: XCTestCase {
         let source = root.appendingPathComponent("local/large.bin")
         let content = Data(repeating: 0x6A, count: 2_097_152)
         try content.write(to: source)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let item = try XCTUnwrap(model.transferItems.first)
         var stopped = false
         let observation = item.$bytes.sink { bytes in
@@ -92,7 +92,7 @@ final class TransferRecoveryIntegrationTests: XCTestCase {
         let files = model.files
         let promises = files.compactMap { model.promiseProvider(for: $0) as? RemoteDownloadPromise }
         RemoteDownloadPromise.group(promises)
-        model.upload([blocking], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([blocking], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.pauseTransfer(try XCTUnwrap(model.transferItems.first).id)
         var callbacks = [0, 0]
         for index in 0..<2 {
@@ -140,7 +140,7 @@ final class TransferRecoveryIntegrationTests: XCTestCase {
         try await eventually { model.canTransfer }
         let taskURL = manager.store.checkpointURL(for: record.id).deletingLastPathComponent().appendingPathComponent("task.json")
         try Data("broken".utf8).write(to: taskURL)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         XCTAssertTrue(model.transferItems.isEmpty)
         XCTAssertNotNil(model.error)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("remote/a.txt").path))

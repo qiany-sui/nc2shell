@@ -141,6 +141,9 @@ rtk proxy env \
 
 # release 应用；不会生成 ZIP
 rtk proxy bash scripts/build-app.sh
+
+# 在临时目录验证应用打包及项目/第三方许可证，替代编译但使用真实签名
+rtk proxy python3 scripts/test-build-app.py
 ```
 
 - 缺少 Python 环境时在 `work/ssh-test-venv` 建虚拟环境并安装 Paramiko；隔离 Shell 工具来源和摘要见 `work/shell-test-tools/manifest.json`，准备脚本为 `work/prepare-shell-tools.py`。它们是可复用测试依赖，不是 Demo 数据。
@@ -161,9 +164,10 @@ rtk proxy bash scripts/build-app.sh
 
 ## 最近验证基线
 
-- 2026-11-03，0.12.16：完整 **403 项**通过、无失败/跳过，涵盖真实回环 SSH/SFTP、认证、Fish/tmux、分屏和短路径；见 `work/split-prompt-final-tests.log`。这是最近一次全量通过记录，不代表后续版本又跑了全量。
+- 2026-11-03，0.12.16：历史全量基线 **403 项**通过、无失败/跳过，涵盖真实回环 SSH/SFTP、认证、Fish/tmux、分屏和短路径；见 `work/split-prompt-final-tests.log`。
 - 0.12.17：60 项相关回归及最后 23 项窗口/终端复验通过；0.12.18：22 项终端/窗口回归通过。
 - 2026-11-04，0.12.19：22 项终端/窗口回归通过、无失败/跳过/编译告警，GUI 验证菜单禁用及成功/失败/取消恢复；见 `work/connection-menu-guard-verification.md`。
 - 2026-11-04，0.12.20：菜单按钮样式调整后 22 项终端/窗口回归通过；离线 GUI 确认菜单可展开，自动工具未可靠触发悬停（原连接按钮同样如此），不把悬停视觉记作手动通过。详见 `work/menu-hover-verification.md`。
 - 2026-11-04，测试收藏隔离：18 项专项及标准回环复验 32 项通过。额外 macOS 沙箱下全量 404 项中，14 个用例受进程观察/特殊权限位限制而失败，随后逐项复验通过；首轮不记作全量通过。详见 `work/bookmark-isolation-verification-2026-11-04.json`。
+- 2026-11-04，代码审查修复：新增 9 项回归后，使用新签名程序及隔离 Fish/tmux 的完整回环 **413 项**通过、无失败/跳过/编译告警；另有打包回归 1 项通过。覆盖旧标签密码更新、普通传输选择框修订号、FIFO 检查点与缺少可选属性的权限编辑。release 构建、arm64、严格签名及项目/第三方许可证内容核对通过；本轮仅更新源码和 `dist/`，未替换正式安装、未升版本。详见 `work/review-fixes-verification-2026-11-04.json`。
 - 当前 0.12.20 已安装并注册启动台，实际启动版本及安装内容一致，原连接与设置保持。未公证；未声称覆盖所有 Linux 配置、远端并发修改、机器断电、多屏缩放或辅助功能场景。

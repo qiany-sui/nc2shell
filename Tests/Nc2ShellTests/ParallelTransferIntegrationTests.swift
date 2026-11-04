@@ -37,8 +37,8 @@ final class ParallelTransferIntegrationTests: XCTestCase {
         let a = root.appendingPathComponent("local/a.bin"), b = root.appendingPathComponent("local/b.bin")
         let data = Data(repeating: 7, count: 1_048_576)
         try data.write(to: a); try data.write(to: b)
-        model.upload([a], expectedPath: model.path, connectionID: model.connectionID)
-        model.upload([b], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([a], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
+        model.upload([b], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let first = model.transferItems[0], second = model.transferItems[1]
         try await eventually { first.bytes > 0 && second.bytes > 0 && !first.state.isFinished && !second.state.isFinished }
         model.cancelQueuedTransfer(first.id)
@@ -55,7 +55,7 @@ final class ParallelTransferIntegrationTests: XCTestCase {
         for name in ["a", "b", "c"] {
             let source = root.appendingPathComponent("local/" + name)
             try Data([1, 2, 3]).write(to: source)
-            model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+            model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
             if name != "c" { model.pauseTransfer(try XCTUnwrap(model.transferItems.last).id) }
         }
         XCTAssertEqual(model.transferItems.map(\.state), [.paused, .paused, .queued])
@@ -82,9 +82,9 @@ final class ParallelTransferIntegrationTests: XCTestCase {
         try await eventually { other.canTransfer }
         let a = root.appendingPathComponent("local/same.txt"), b = root.appendingPathComponent("second/same.txt")
         try Data([1]).write(to: a); try Data([2]).write(to: b)
-        model.upload([a], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([a], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.pauseTransfer(model.transferItems[0].id)
-        other.upload([b], expectedPath: other.path, connectionID: other.connectionID)
+        other.upload([b], expectedPath: other.path, connectionID: other.connectionID, revision: other.locationRevision)
         XCTAssertEqual(other.transferItems[0].state, .queued)
         model.cancelQueuedTransfer(model.transferItems[0].id)
         try await eventually { other.transferItems[0].state == .completed }
@@ -100,7 +100,7 @@ final class ParallelTransferIntegrationTests: XCTestCase {
         let promises = try model.files.map { try XCTUnwrap(model.promiseProvider(for: $0) as? RemoteDownloadPromise) }
         RemoteDownloadPromise.group(promises)
         let source = root.appendingPathComponent("local/block.bin"); try Data([4]).write(to: source)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.pauseTransfer(model.transferItems[0].id)
         var callbacks = [0, 0]
         for (index, promise) in promises.enumerated() {
@@ -124,14 +124,14 @@ final class ParallelTransferIntegrationTests: XCTestCase {
         for name in ["a.bin", "b.bin"] {
             let source = root.appendingPathComponent("local/" + name)
             try Data(repeating: 5, count: 1_048_576).write(to: source)
-            model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+            model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         }
         try await eventually { model.transferItems.allSatisfy { $0.bytes > 0 && !$0.state.isFinished } }
         model.disconnect()
         model.connect(profile: session.profile, controlPath: try XCTUnwrap(session.controlPath), initialDirectory: root.appendingPathComponent("remote").path)
         try await eventually { model.canEnqueue }
         let source = root.appendingPathComponent("local/new.txt"); try Data([9]).write(to: source)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.transferItems.last?.state == .completed && recovery.activeIDs.isEmpty }
         XCTAssertEqual(Array(model.transferItems.prefix(2)).map(\.state), [.failed, .failed])
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("remote/new.txt")), Data([9]))
@@ -146,7 +146,7 @@ final class ParallelTransferIntegrationTests: XCTestCase {
         defer { other.disconnect(); model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         try await eventually { other.canManageFiles }
         let source = root.appendingPathComponent("local/a.txt"); try Data([1]).write(to: source)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.pauseTransfer(model.transferItems[0].id)
         XCTAssertFalse(other.canManageFiles)
         other.createDirectory("blocked", expectedPath: other.path, connectionID: other.connectionID, revision: other.locationRevision)
@@ -171,7 +171,7 @@ final class ParallelTransferIntegrationTests: XCTestCase {
             let source = root.appendingPathComponent("local/" + name)
             try Data("new".utf8).write(to: source)
             try Data("old".utf8).write(to: root.appendingPathComponent("remote/" + name))
-            model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+            model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         }
         try await eventually { model.transferItems.allSatisfy(\.isWaitingForConflict) }
         XCTAssertEqual(presented.count, 1)
@@ -205,7 +205,7 @@ final class ParallelTransferIntegrationTests: XCTestCase {
         promise.filePromiseProvider(promise, writePromiseTo: root.appendingPathComponent("downloads/download.bin")) { error in
             XCTAssertNotNil(error); callbacks += 1
         }
-        model.upload([root.appendingPathComponent("local/upload.bin")], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([root.appendingPathComponent("local/upload.bin")], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.transferItems.count == 2 && model.transferItems.allSatisfy { $0.bytes > 0 && !$0.state.isFinished } }
         let items = model.transferItems
         let recoveryIDs = Set(items.compactMap(\.recoveryID))

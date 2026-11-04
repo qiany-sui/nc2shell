@@ -161,6 +161,12 @@ bash scripts/swift.sh test
 
 没有隔离 SSH 夹具或可选 Shell 工具时，相应集成测试会明确跳过，不能将跳过项记为通过。
 
+打包回归测试在临时目录运行实际打包脚本，替代 Swift 编译阶段，验证项目和第三方许可证进入应用包，并使用本机 `codesign` 完成签名检查：
+
+```bash
+python3 scripts/test-build-app.py
+```
+
 ### 本地回环 SSH/SFTP 测试
 
 测试服务只监听 `127.0.0.1`，在 `work/` 下创建临时目录，并生成独立密码、密钥和 known_hosts；正常结束后自动回收。不要用真实服务器、连接配置或凭据替代测试夹具。
@@ -200,4 +206,4 @@ NC2SHELL_TEST_ASKPASS_EXECUTABLE="$PWD/dist/Nc2Shell.app/Contents/MacOS/Nc2Shell
 
 本项目采用 [MIT 许可证](LICENSE)，版权署名为 `Copyright (c) 2026 Nc`。授权条件与免责条款以许可证全文为准。
 
-第三方依赖继续适用各自的许可证及归属要求，不因本项目采用 MIT 而改变。应用打包时会保留 SwiftTerm 的许可证文件。
+第三方依赖继续适用各自的许可证及归属要求，不因本项目采用 MIT 而改变。应用打包时会保留本项目的 MIT 许可证和 SwiftTerm 的许可证文件。

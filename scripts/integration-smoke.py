@@ -120,6 +120,8 @@ class FixtureSFTP(paramiko.SFTPServerInterface):
             for child in target.iterdir():
                 attrs = paramiko.SFTPAttributes.from_stat(child.lstat())
                 attrs.filename = child.name
+                if child.name == "nc2-permissions-partial-listing":
+                    attrs.st_size = attrs.st_atime = attrs.st_mtime = None
                 result.append(attrs)
             if target.name == "nc2-search-invalid" and result:
                 result.append(result[0])

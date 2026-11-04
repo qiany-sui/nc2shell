@@ -95,7 +95,7 @@ final class TerminalIntegrationTests: XCTestCase {
         XCTAssertTrue(model.sessions.allSatisfy { $0.state == .connected })
         let upload = root.appendingPathComponent("close-\(UUID()).bin")
         try Data(repeating: 42, count: 512 * 1024).write(to: upload)
-        first.files.upload([upload], expectedPath: first.files.path, connectionID: first.files.connectionID)
+        first.files.upload([upload], expectedPath: first.files.path, connectionID: first.files.connectionID, revision: first.files.locationRevision)
         try await eventually { first.files.isTransferring }
         let survivorPID = survivor.process?.shellPid
         model.closeConnections(profile) { _, _, _ in confirmations += 1; return true }

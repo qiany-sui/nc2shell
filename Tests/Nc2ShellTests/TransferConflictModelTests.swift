@@ -31,7 +31,7 @@ final class TransferConflictModelTests: XCTestCase {
         for name in ["a.txt", "b.txt", "c.txt"] { try Data("remote".utf8).write(to: root.appendingPathComponent("remote/" + name)) }
         for name in ["a.txt", "b.txt"] { try Data("keep".utf8).write(to: root.appendingPathComponent("local/" + name)) }
         model.refresh(); try await eventually { model.canTransfer }
-        model.download(model.files, into: root.appendingPathComponent("local"), expectedPath: model.path, connectionID: model.connectionID)
+        model.download(model.files, into: root.appendingPathComponent("local"), expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.canTransfer && model.message?.contains("3/3") == true }
         XCTAssertNil(model.error); XCTAssertEqual(prompts, 1)
         XCTAssertTrue(model.message?.contains("跳过 2") == true)
@@ -48,7 +48,7 @@ final class TransferConflictModelTests: XCTestCase {
         let source = root.appendingPathComponent("local/a.txt")
         try Data("new".utf8).write(to: source)
         try Data("old".utf8).write(to: root.appendingPathComponent("remote/a.txt"))
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { reply != nil }
         model.follow(root.appendingPathComponent("next").path)
         try XCTUnwrap(reply)(.keepBoth, false)

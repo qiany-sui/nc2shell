@@ -326,8 +326,8 @@ final class RemoteFilesModel: ObservableObject {
         }
     }
 
-    func upload(_ urls: [URL], expectedPath: String, connectionID: UUID) {
-        guard validateSelection(expectedPath, connectionID), canEnqueue, !urls.isEmpty else { return }
+    func upload(_ urls: [URL], expectedPath: String, connectionID: UUID, revision: UUID) {
+        guard validateSelection(expectedPath, connectionID, revision: revision), canEnqueue, !urls.isEmpty else { return }
         if let record = recoveryRecord(name: urls.count == 1 ? urls[0].lastPathComponent : "上传 \(urls.count) 项", direction: .upload,
                                        roots: urls.map { .init(localPath: $0.path, remotePath: RemoteFile.join(expectedPath, $0.lastPathComponent)) }) {
             enqueueRecoverable(record)
@@ -367,7 +367,7 @@ final class RemoteFilesModel: ObservableObject {
                     self.error = "目录列表已变化，请重新拖入项目。"; return
                 }
                 guard self.validateSelection(directory, connection), self.canEnqueue else { return }
-                self.upload(urls, expectedPath: directory, connectionID: connection)
+                self.upload(urls, expectedPath: directory, connectionID: connection, revision: revision)
             case .failure(let error):
                 self.error = "无法读取拖入项目：\(error.localizedDescription)"
             }
@@ -426,8 +426,7 @@ final class RemoteFilesModel: ObservableObject {
     }
 
     private func validateFileOperation(_ expectedPath: String, _ connectionID: UUID, revision: UUID, selected: [RemoteFile] = []) -> Bool {
-        guard validateSelection(expectedPath, connectionID) else { return false }
-        guard locationRevision == revision else { error = "目录列表已变化，请重新选择并确认操作。"; return false }
+        guard validateSelection(expectedPath, connectionID, revision: revision) else { return false }
         guard canManageFiles else { error = "当前有传输或文件操作，请完成后重试。"; return false }
         guard selected.isEmpty || canManage(selected) else {
             error = "请选择当前目录中的普通文件或文件夹，项目可能已变化。"; return false
@@ -435,8 +434,8 @@ final class RemoteFilesModel: ObservableObject {
         return true
     }
 
-    func download(_ selected: [RemoteFile], into directory: URL, expectedPath: String, connectionID: UUID) {
-        guard validateSelection(expectedPath, connectionID) else { return }
+    func download(_ selected: [RemoteFile], into directory: URL, expectedPath: String, connectionID: UUID, revision: UUID) {
+        guard validateSelection(expectedPath, connectionID, revision: revision) else { return }
         guard canEnqueue else { error = "当前正在读取目录或准备其他操作，请完成后重试。"; return }
         guard canDownload(selected) else { error = "请选择当前目录中的普通文件或文件夹，不支持符号链接或特殊文件。"; return }
         if let record = recoveryRecord(name: "下载 \(selected.count) 项", direction: .download,
@@ -463,8 +462,8 @@ final class RemoteFilesModel: ObservableObject {
         }
     }
 
-    func download(_ file: RemoteFile, to url: URL, expectedPath: String, connectionID: UUID, completion: @escaping (Error?) -> Void = { _ in }) {
-        guard validateSelection(expectedPath, connectionID) else {
+    func download(_ file: RemoteFile, to url: URL, expectedPath: String, connectionID: UUID, revision: UUID, completion: @escaping (Error?) -> Void = { _ in }) {
+        guard validateSelection(expectedPath, connectionID, revision: revision) else {
             completion(SFTPError.message(error ?? "目录或连接已变化。")); return
         }
         guard canDownload([file]) else {
@@ -754,9 +753,13 @@ final class RemoteFilesModel: ObservableObject {
         active?.cancel()
     }
 
-    private func validateSelection(_ expectedPath: String, _ connectionID: UUID) -> Bool {
+    private func validateSelection(_ expectedPath: String, _ connectionID: UUID, revision: UUID? = nil) -> Bool {
         guard isConnected, self.connectionID == connectionID, path == expectedPath, locationValidated else {
             error = "目录或连接已变化，请重新选择要操作的项目。"
+            return false
+        }
+        if let revision, locationRevision != revision {
+            error = "目录列表已变化，请重新选择并确认操作。"
             return false
         }
         return true

@@ -122,6 +122,28 @@ final class SavedPasswordIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testExistingTemporaryPasswordSessionReconnectsWithNewRememberedPassword() async throws {
+        let fixture = try fixture()
+        let root = URL(fileURLWithPath: fixture.directory).appendingPathComponent("remembered-reconnect-\(UUID())")
+        let credentials = KeychainCredentials()
+        var profile = ConnectionProfile(name: "Remembered reconnect", host: "127.0.0.1", port: fixture.port, username: "password-test")
+        defer { try? credentials.setPassword(nil, for: profile) }
+        let model = AppModel(store: .init(fileURL: root.appendingPathComponent("connections.json")),
+                             settingsStore: .init(fileURL: root.appendingPathComponent("settings.json")),
+                             credentials: credentials, sessionFactory: { self.session(fixture, profile: $0) })
+        defer { model.sessions.forEach { $0.disconnect() } }
+        model.save(profile, password: "wrong-\(UUID())")
+        let existing = model.connect(profile)
+        try await eventually { existing.state == .failed && !existing.isRunning }
+        profile.rememberPassword = true
+        model.save(profile, password: fixture.password)
+        XCTAssertNil(model.errorMessage)
+        existing.start()
+        try await eventually { existing.state == .connected }
+        XCTAssertFalse(output(existing).contains(fixture.password))
+    }
+
+    @MainActor
     func testSwitchingPasswordStorageDoesNotReviveOldTemporaryPassword() async throws {
         let fixture = try fixture()
         let root = URL(fileURLWithPath: fixture.directory).appendingPathComponent("password-storage-\(UUID())")

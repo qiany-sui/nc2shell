@@ -25,6 +25,65 @@ final class TransferQueueTests: XCTestCase {
     }
 
     @MainActor
+    func testTransferConfirmationsRejectRefreshedDirectory() async throws {
+        try await checkStaleTransferConfirmations(roundTrip: false)
+    }
+
+    @MainActor
+    func testTransferConfirmationsRejectDirectoryRoundTrip() async throws {
+        try await checkStaleTransferConfirmations(roundTrip: true)
+    }
+
+    @MainActor
+    private func checkStaleTransferConfirmations(roundTrip: Bool) async throws {
+        let (session, model, root) = try await connected { _, _, reply in reply(.skip, false); return {} }
+        defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("local/upload.txt")
+        try Data([1]).write(to: source)
+        try Data([2]).write(to: root.appendingPathComponent("remote/download.txt"))
+        model.refresh(); try await eventually { model.canEnqueue }
+        let selected = try XCTUnwrap(model.files.first { $0.name == "download.txt" })
+        let directory = model.path, connection = model.connectionID, revision = model.locationRevision
+        if roundTrip {
+            model.browse(root.appendingPathComponent("next").path)
+            try await eventually { model.canEnqueue }
+            model.browse(directory)
+        } else { model.refresh() }
+        try await eventually { model.canEnqueue }
+        XCTAssertNotEqual(model.locationRevision, revision)
+        XCTAssertEqual(model.path, directory)
+        XCTAssertTrue(model.files.contains(selected), "文件元数据未变也必须拒绝旧选择框")
+        model.upload([source], expectedPath: directory, connectionID: connection, revision: revision)
+        XCTAssertTrue(model.transferItems.isEmpty)
+        XCTAssertNotNil(model.error)
+        var callbacks = 0
+        model.download(selected, to: root.appendingPathComponent("local/single.txt"), expectedPath: directory, connectionID: connection, revision: revision) { error in
+            callbacks += 1
+            XCTAssertNotNil(error)
+        }
+        XCTAssertEqual(callbacks, 1)
+        XCTAssertTrue(model.transferItems.isEmpty)
+        model.download([selected], into: root.appendingPathComponent("local"), expectedPath: directory, connectionID: connection, revision: revision)
+        XCTAssertTrue(model.transferItems.isEmpty)
+        XCTAssertNotNil(model.error)
+        model.cancelTransfer()
+        try await eventually { model.transferItems.allSatisfy { $0.state.isFinished } }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("remote/upload.txt").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("local/single.txt").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("local/download.txt").path))
+        model.upload([source], expectedPath: directory, connectionID: connection, revision: model.locationRevision)
+        model.download(selected, to: root.appendingPathComponent("local/single.txt"), expectedPath: directory,
+                       connectionID: connection, revision: model.locationRevision)
+        model.download([selected], into: root.appendingPathComponent("local"), expectedPath: directory,
+                       connectionID: connection, revision: model.locationRevision)
+        try await eventually { model.transferItems.count == 3 && model.transferItems.allSatisfy { $0.state.isFinished } }
+        XCTAssertTrue(model.transferItems.allSatisfy { $0.state == .completed })
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("remote/upload.txt")), Data([1]))
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("local/single.txt")), Data([2]))
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("local/download.txt")), Data([2]))
+    }
+
+    @MainActor
     func testAcceptsAnotherUploadWhileConflictWaitsAndKeepsCapturedTarget() async throws {
         var reply: TransferConflictPrompt.Reply?
         let (session, model, root) = try await connected { _, _, respond in reply = respond; return {} }
@@ -34,9 +93,9 @@ final class TransferQueueTests: XCTestCase {
         try Data("first new".utf8).write(to: first)
         try Data("second".utf8).write(to: second)
         try Data("old".utf8).write(to: root.appendingPathComponent("remote/first.txt"))
-        model.upload([first], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([first], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { reply != nil }
-        model.upload([second], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([second], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.follow(root.appendingPathComponent("next").path)
         try XCTUnwrap(reply)(.skip, false)
         try await eventually { model.canTransfer }
@@ -51,15 +110,15 @@ final class TransferQueueTests: XCTestCase {
         let a = root.appendingPathComponent("local/a.bin"), b = root.appendingPathComponent("local/b.txt"), c = root.appendingPathComponent("local/c.txt")
         try Data(repeating: 7, count: 1_048_576).write(to: a)
         try Data([2]).write(to: b); try Data([3]).write(to: c)
-        model.upload([a], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([a], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let first = try XCTUnwrap(model.transferItems.first)
         model.pauseTransfer(first.id)
-        model.upload([b], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([b], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         XCTAssertTrue(model.canEnqueue); XCTAssertFalse(model.canTransfer)
         XCTAssertEqual(model.transferItems.map(\.state), [.paused, .queued])
         model.browse(root.appendingPathComponent("next").path)
         try await eventually { model.canEnqueue }
-        model.upload([c], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([c], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(first.bytes, 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("remote/a.bin").path))
@@ -77,7 +136,7 @@ final class TransferQueueTests: XCTestCase {
         let (session, model, root) = try await connected { _, _, reply in reply(.skip, false); return {} }
         defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("local/missing.txt")
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.canTransfer }
         let failed = try XCTUnwrap(model.transferItems.first)
         XCTAssertEqual(failed.state, .failed)
@@ -108,7 +167,7 @@ final class TransferQueueTests: XCTestCase {
         model.refresh(); try await eventually { model.canTransfer }
         let promises = try model.files.map { try XCTUnwrap(model.promiseProvider(for: $0) as? RemoteDownloadPromise) }
         RemoteDownloadPromise.group(promises)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let upload = try XCTUnwrap(model.transferItems.first)
         model.pauseTransfer(upload.id)
         var callbacks = [0, 0]
@@ -135,9 +194,9 @@ final class TransferQueueTests: XCTestCase {
         defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("local/a.bin")
         try Data(repeating: 2, count: 1_048_576).write(to: source)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.pauseTransfer(try XCTUnwrap(model.transferItems.first).id)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.disconnect()
         try await eventually { model.transferItems.allSatisfy { $0.state.isFinished } }
         XCTAssertEqual(model.transferItems.map(\.state), [.failed, .failed])
@@ -153,7 +212,7 @@ final class TransferQueueTests: XCTestCase {
         defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("local/drop.txt")
         try Data([2]).write(to: source)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let first = try XCTUnwrap(model.transferItems.first)
         model.pauseTransfer(first.id)
         let provider = NSItemProvider()
@@ -178,11 +237,11 @@ final class TransferQueueTests: XCTestCase {
         defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let large = root.appendingPathComponent("local/large.bin"), next = root.appendingPathComponent("local/next.txt")
         try Data(repeating: 5, count: 8 * 1_048_576).write(to: large); try Data([8]).write(to: next)
-        model.upload([large], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([large], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let first = try XCTUnwrap(model.transferItems.first)
         try await eventually { first.bytes > 0 }
         model.pauseTransfer(first.id)
-        model.upload([next], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([next], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await Task.sleep(nanoseconds: 200_000_000)
         let pausedBytes = first.bytes
         try await Task.sleep(nanoseconds: 300_000_000)
@@ -204,13 +263,13 @@ final class TransferQueueTests: XCTestCase {
         try await eventually { other.canTransfer }
         let a = root.appendingPathComponent("local/a.txt"), b = root.appendingPathComponent("local/b.txt"), c = root.appendingPathComponent("local/c.txt")
         for source in [a, b, c] { try Data([1]).write(to: source) }
-        model.upload([a], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([a], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         model.pauseTransfer(try XCTUnwrap(model.transferItems.first).id)
-        model.upload([b], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([b], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let head = model.transferItems[1]
         model.pauseTransfer(head.id)
-        model.upload([c], expectedPath: model.path, connectionID: model.connectionID)
-        other.upload([a], expectedPath: other.path, connectionID: other.connectionID)
+        model.upload([c], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
+        other.upload([a], expectedPath: other.path, connectionID: other.connectionID, revision: other.locationRevision)
         try await eventually { other.canTransfer }
         XCTAssertEqual(other.transferItems[0].state, .completed)
         model.resumeTransfer(model.transferItems[0].id)
@@ -257,7 +316,7 @@ final class TransferQueueTests: XCTestCase {
         defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("local/a.txt"), remote = root.appendingPathComponent("remote/a.txt")
         try Data([1]).write(to: source); try Data([2]).write(to: remote)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.canTransfer }
         let upload = try XCTUnwrap(model.transferItems.first)
         XCTAssertEqual(upload.state, .cancelled, "用户在冲突框取消不应显示为失败")

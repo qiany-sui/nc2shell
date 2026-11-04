@@ -255,7 +255,7 @@ final class TransferMetadataIntegrationTests: XCTestCase {
         defer { model.disconnect(); client.cancel(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let source = try write(root, "local/a.txt")
         try attributes(source, mode: 0o750, time: 123)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let item = try XCTUnwrap(model.transferItems.first)
         model.pauseTransfer(item.id)
         let record = try XCTUnwrap(manager.store.load().first)
@@ -279,7 +279,7 @@ final class TransferMetadataIntegrationTests: XCTestCase {
         let a = try write(root, "local/a"), b = try write(root, "local/b", Data([4]))
         try attributes(a, mode: 0o750, time: 123); try attributes(b, mode: 0o640, time: 456)
         try policy(root, ["denyName": "a"])
-        model.upload([a, b], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([a, b], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let failed = try XCTUnwrap(model.transferItems.first)
         try await wait { failed.state.isFinished && model.canTransfer }
         XCTAssertEqual(failed.state, .failed)

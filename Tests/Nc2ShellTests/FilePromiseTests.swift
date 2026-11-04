@@ -23,7 +23,7 @@ final class FilePromiseTests: XCTestCase {
         let model = RemoteFilesModel(), file = RemoteFile(name: "file", size: 1, mode: 0o100600)
         XCTAssertNil(model.promiseProvider(for: file))
         var calls = 0
-        model.download(file, to: URL(fileURLWithPath: "/tmp/not-written"), expectedPath: "/remote", connectionID: model.connectionID) { error in
+        model.download(file, to: URL(fileURLWithPath: "/tmp/not-written"), expectedPath: "/remote", connectionID: model.connectionID, revision: model.locationRevision) { error in
             calls += 1
             XCTAssertNotNil(error)
         }

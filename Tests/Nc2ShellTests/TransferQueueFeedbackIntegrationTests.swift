@@ -33,7 +33,7 @@ final class TransferQueueFeedbackIntegrationTests: XCTestCase {
         try Data([1, 2, 3, 4, 5]).write(to: folder.appendingPathComponent("nested"))
         try Data([6, 7, 8]).write(to: file)
         try Data([9, 9, 9]).write(to: root.appendingPathComponent("remote/skip.txt"))
-        model.upload([folder, file], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([folder, file], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let upload = try XCTUnwrap(model.transferItems.first)
         XCTAssertTrue(upload.isEstimating)
         try await eventually { reply != nil }
@@ -45,7 +45,7 @@ final class TransferQueueFeedbackIntegrationTests: XCTestCase {
         XCTAssertEqual(upload.state, .completed)
         XCTAssertEqual(upload.bytes, 5)
         XCTAssertTrue(upload.detail?.contains("跳过 1") == true)
-        model.download(model.files, into: root.appendingPathComponent("download"), expectedPath: model.path, connectionID: model.connectionID)
+        model.download(model.files, into: root.appendingPathComponent("download"), expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.canTransfer }
         let download = try XCTUnwrap(model.transferItems.last)
         XCTAssertEqual(download.estimatedTotalBytes, 8)
@@ -60,18 +60,18 @@ final class TransferQueueFeedbackIntegrationTests: XCTestCase {
         defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let good = root.appendingPathComponent("local/good"), missing = root.appendingPathComponent("local/missing")
         try Data([1]).write(to: good)
-        model.upload([good], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([good], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.canTransfer }
-        model.upload([missing], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([missing], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.canTransfer }
         let failed = try XCTUnwrap(model.transferItems.last)
         XCTAssertEqual(failed.state, .failed)
-        model.upload([good], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([good], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let paused = try XCTUnwrap(model.transferItems.last)
         model.pauseTransfer(paused.id)
-        model.upload([good], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([good], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let queued = try XCTUnwrap(model.transferItems.last)
-        model.upload([good], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([good], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let cancelled = try XCTUnwrap(model.transferItems.last)
         model.cancelQueuedTransfer(cancelled.id)
         model.clearCompletedTransfers()
@@ -121,14 +121,14 @@ final class TransferQueueFeedbackIntegrationTests: XCTestCase {
         defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
         let source = root.appendingPathComponent("local/source")
         try Data([1, 2, 3]).write(to: source)
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         let old = try XCTUnwrap(model.transferItems.first)
         model.pauseTransfer(old.id)
         XCTAssertTrue(old.isEstimating)
         model.disconnect()
         model.connect(profile: session.profile, controlPath: try XCTUnwrap(session.controlPath), initialDirectory: root.appendingPathComponent("remote").path)
         try await eventually { model.canTransfer && old.state.isFinished }
-        model.upload([source], expectedPath: model.path, connectionID: model.connectionID)
+        model.upload([source], expectedPath: model.path, connectionID: model.connectionID, revision: model.locationRevision)
         try await eventually { model.canTransfer }
         XCTAssertEqual(old.state, .failed)
         XCTAssertNil(old.estimatedTotalBytes)

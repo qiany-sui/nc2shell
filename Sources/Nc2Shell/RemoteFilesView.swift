@@ -344,11 +344,11 @@ struct RemoteFilesView: View {
     }
 
     private func upload() {
-        let directory = model.path, connectionID = model.connectionID
+        let directory = model.path, connectionID = model.connectionID, revision = model.locationRevision
         let panel = NSOpenPanel()
         panel.title = "上传到 \(model.path)"; panel.prompt = "上传"
         panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true
-        panel.begin { response in if response == .OK { model.upload(panel.urls, expectedPath: directory, connectionID: connectionID) } }
+        panel.begin { response in if response == .OK { model.upload(panel.urls, expectedPath: directory, connectionID: connectionID, revision: revision) } }
     }
 
     private func editName(_ file: RemoteFile? = nil) {
@@ -434,19 +434,19 @@ struct RemoteFilesView: View {
 
     private func download(_ selected: [RemoteFile]) {
         guard model.canDownload(selected) else { return }
-        let directory = model.path, connectionID = model.connectionID
+        let directory = model.path, connectionID = model.connectionID, revision = model.locationRevision
         if selected.count == 1, let file = selected.first {
             let panel = NSSavePanel()
             panel.title = "下载 \(file.name)"; panel.prompt = "下载"
             panel.nameFieldStringValue = file.name; panel.canCreateDirectories = true
-            panel.begin { response in if response == .OK, let url = panel.url { model.download(file, to: url, expectedPath: directory, connectionID: connectionID) } }
+            panel.begin { response in if response == .OK, let url = panel.url { model.download(file, to: url, expectedPath: directory, connectionID: connectionID, revision: revision) } }
         } else {
             let panel = NSOpenPanel()
             panel.title = "下载 \(selected.count) 项到本地目录"; panel.prompt = "下载"
             panel.message = "所选文件和文件夹将保留原名，遇到同名项目时询问处理方式。"
             panel.canChooseFiles = false; panel.canChooseDirectories = true
             panel.allowsMultipleSelection = false; panel.canCreateDirectories = true
-            panel.begin { response in if response == .OK, let url = panel.url { model.download(selected, into: url, expectedPath: directory, connectionID: connectionID) } }
+            panel.begin { response in if response == .OK, let url = panel.url { model.download(selected, into: url, expectedPath: directory, connectionID: connectionID, revision: revision) } }
         }
     }
 }

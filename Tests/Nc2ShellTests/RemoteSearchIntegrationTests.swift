@@ -85,7 +85,7 @@ final class RemoteSearchIntegrationTests: XCTestCase {
         files.configureTransferSettings(settings)
         files.connect(profile: session.profile, controlPath: try XCTUnwrap(session.controlPath), initialDirectory: target.path)
         try await eventually { files.canEnqueue }
-        files.upload([source], expectedPath: target.path, connectionID: files.connectionID)
+        files.upload([source], expectedPath: target.path, connectionID: files.connectionID, revision: files.locationRevision)
         let task = try XCTUnwrap(files.transferItems.first)
         try await eventually { task.state == .running && task.bytes > 0 }
         files.search.prepare(directory: root.appendingPathComponent("nc2-estimate-delayed").path, includeHidden: false)
@@ -155,7 +155,7 @@ final class RemoteSearchIntegrationTests: XCTestCase {
         let uploadSource = try write(root, "upload-source")
         files.browse(root.path)
         try await eventually { files.locationValidated && files.path == root.path }
-        files.upload([uploadSource], expectedPath: root.path, connectionID: files.connectionID)
+        files.upload([uploadSource], expectedPath: root.path, connectionID: files.connectionID, revision: files.locationRevision)
         let task = try XCTUnwrap(files.transferItems.first)
         files.pauseTransfer(task.id)
         files.search.prepare(directory: slow.deletingLastPathComponent().path, includeHidden: false)
