@@ -10,6 +10,7 @@ struct RemoteFilesView: View {
     @ObservedObject private var navigation: RemoteNavigationState
     @ObservedObject private var bookmarks: RemoteDirectoryBookmarks
     @State private var pathInput = ""
+    @State private var submittedPath: String?
     @FocusState private var pathFocused: Bool
     @FocusState private var filterFocused: Bool
     @State private var selection: Set<String> = []
@@ -84,10 +85,13 @@ struct RemoteFilesView: View {
                 HStack(spacing: 10) {
                     HStack(spacing: 2) {
                         TextField("远程路径", text: $pathInput).textFieldStyle(.plain)
-                            .font(.system(size: 14, weight: .regular)).onSubmit { if !pathInput.isEmpty { model.browse(pathInput) } }
+                            .font(.system(size: 14, weight: .regular)).onSubmit {
+                                if !pathInput.isEmpty { submittedPath = pathInput; model.browse(pathInput) }
+                            }
                             .focused($pathFocused)
                             .onExitCommand {
                                 pathInput = model.path
+                                submittedPath = nil
                                 pathFocused = false
                                 returnToTerminal()
                             }
@@ -270,10 +274,22 @@ struct RemoteFilesView: View {
         }
         .onDrop(of: [.fileURL], delegate: RemoteUploadDropDelegate(model: model, isTargeted: $isDropTargeted))
         .onAppear { pathInput = model.path }
-        .onChange(of: model.path) { _, path in pathInput = path; selection = [] }
+        .onChange(of: model.path) { previous, path in
+            if pathInput == previous { pathInput = path }
+            selection = []
+        }
+        .onChange(of: model.isLoading) { _, loading in
+            if !loading, let submittedPath {
+                // 成功提交后显示规范路径；请求期间继续编辑的内容仍属于新草稿。
+                if model.locationValidated, pathInput == submittedPath { pathInput = model.path }
+                self.submittedPath = nil
+            }
+        }
         .onChange(of: model.files) { _, _ in selection = [] }
         .onChange(of: visibleFiles.map(\.name)) { _, names in selection.formIntersection(Set(names)) }
-        .onChange(of: model.connectionID) { _, _ in searchPresented = false }
+        .onChange(of: model.connectionID) { _, _ in
+            searchPresented = false; submittedPath = nil; pathInput = model.path
+        }
         .onChange(of: showFilter) { _, visible in
             if !visible {
                 filterFocused = false

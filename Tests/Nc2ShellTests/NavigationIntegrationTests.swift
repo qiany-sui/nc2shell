@@ -86,6 +86,60 @@ final class NavigationIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testRepeatedLogicalDirectoryReportsKeepSelectionValid() async throws {
+        let (session, model, root) = try await connected()
+        defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
+        let target = root.appendingPathComponent("b"), alias = root.appendingPathComponent("alias")
+        try Data("fixture".utf8).write(to: target.appendingPathComponent("file.txt"))
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: target)
+        model.follow(alias.path)
+        try await eventually { model.canTransfer && model.path == target.path }
+        let revision = model.locationRevision, connection = model.connectionID
+        let files = model.files
+        for _ in 0..<3 { model.follow(alias.path) }
+        XCTAssertFalse(model.isLoading, "相同逻辑目录不能重复清空已验证的列表")
+        XCTAssertEqual(model.files, files)
+        XCTAssertEqual(model.locationRevision, revision)
+        let source = root.appendingPathComponent("confirmed-upload.txt")
+        try Data("fixture".utf8).write(to: source)
+        model.upload([source], expectedPath: target.path, connectionID: connection, revision: revision)
+        XCTAssertEqual(model.transferItems.count, 1, "重复目录报告不应使已捕获的上传确认失效")
+        if let item = model.transferItems.first {
+            try await eventually { item.state.isFinished }
+            XCTAssertEqual(item.state, .completed)
+        }
+
+        model.refresh()
+        XCTAssertNotEqual(model.locationRevision, revision, "显式刷新仍须使旧确认失效")
+        try await eventually { model.canTransfer }
+        model.browse(root.appendingPathComponent("c").path)
+        try await eventually { model.canTransfer && model.path.hasSuffix("/c") }
+        model.setFollowing(true)
+        try await eventually { model.canTransfer && model.path == target.path }
+        let resumedRevision = model.locationRevision
+        model.follow(alias.path)
+        XCTAssertEqual(model.locationRevision, resumedRevision)
+    }
+
+    @MainActor
+    func testFailedLogicalDirectoryCanBeRetriedAndReconnectRevalidatesIt() async throws {
+        let (session, model, root) = try await connected()
+        defer { model.disconnect(); session.disconnect(); try? FileManager.default.removeItem(at: root) }
+        let target = root.appendingPathComponent("b"), alias = root.appendingPathComponent("later-alias")
+        model.follow(alias.path)
+        try await eventually { !model.isLoading && model.error != nil }
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: target)
+        model.follow(alias.path)
+        try await eventually { model.canTransfer && model.path == target.path }
+        model.disconnect()
+        model.connect(profile: session.profile, controlPath: try XCTUnwrap(session.controlPath), initialDirectory: alias.path)
+        try await eventually { model.canTransfer && model.path == target.path }
+        let revision = model.locationRevision
+        model.follow(alias.path)
+        XCTAssertEqual(model.locationRevision, revision, "初始目录也应保留已验证的逻辑路径")
+    }
+
+    @MainActor
     private func eventually(_ predicate: () -> Bool) async throws {
         for _ in 0..<150 {
             if predicate() { return }

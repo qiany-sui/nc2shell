@@ -48,7 +48,7 @@ struct ContentView: View {
                 Button { showTransfers.toggle() } label: { Image(systemName: "arrow.up.arrow.down") }
                     .buttonStyle(WorkspaceIconButton()).help("传输管理与待恢复任务")
                     .accessibilityLabel("传输管理")
-                Text("0.12.20").font(.system(size: 11)).foregroundStyle(WorkspaceAppearance.secondary)
+                Text("0.12.21").font(.system(size: 11)).foregroundStyle(WorkspaceAppearance.secondary)
             }.font(.system(size: 13)).foregroundStyle(WorkspaceAppearance.secondary)
                 .padding(.horizontal, 18).frame(height: 42).background(WorkspaceAppearance.panel)
         }
@@ -188,7 +188,14 @@ struct ContentView: View {
             .background(ConnectionSelectionAppearance())
             .background(selected ? WorkspaceAppearance.selected : .clear)
             .overlay(alignment: .leading) { Rectangle().fill(active ? WorkspaceAppearance.accent : .clear).frame(width: 5) }
-            .contentShape(Rectangle()).onTapGesture { model.selectedProfileID = profile.id }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                model.selectedProfileID = profile.id
+                // 双击与连接按钮遵循同一规则，不能重复创建仍在认证的会话。
+                guard !model.sessions.contains(where: { $0.profile.id == profile.id && ($0.state == .connecting || $0.state == .reconnecting) }) else { return }
+                model.connect(profile)
+            }
+            .onTapGesture { model.selectedProfileID = profile.id }
     }
 
     @ViewBuilder private func connectionMenu(_ profile: ConnectionProfile) -> some View {

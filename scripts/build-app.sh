@@ -29,7 +29,7 @@ shutil.copy2(root / "Assets/AppIcon-A-Refined.icns", contents / "Resources/AppIc
 info = {
     "CFBundleExecutable": "Nc2Shell", "CFBundleName": "Nc2Shell",
     "CFBundleDisplayName": "Nc2Shell", "CFBundleIdentifier": "com.nc2oding.Nc2Shell",
-    "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.12.20", "CFBundleVersion": "39",
+    "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.12.21", "CFBundleVersion": "40",
     "CFBundleIconFile": "AppIcon.icns",
     "LSMinimumSystemVersion": "14.0", "NSPrincipalClass": "NSApplication",
     "NSHighResolutionCapable": True,

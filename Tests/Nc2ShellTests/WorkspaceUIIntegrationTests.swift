@@ -91,6 +91,17 @@ final class WorkspaceUIIntegrationTests: XCTestCase {
         XCTAssertEqual(path.stringValue, "/unsubmitted-path-draft", "收起保留尚未提交的路径，且不会导航")
         XCTAssertNotEqual(session.files.path, "/unsubmitted-path-draft")
 
+        let destination = root.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        session.files.browse(destination.path)
+        for _ in 0..<150 {
+            if session.files.path == destination.path && !session.files.isLoading { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(session.files.path, destination.path)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(path.stringValue, "/unsubmitted-path-draft", "异步目录结果不能覆盖尚未提交的草稿")
+
         // Escape 应取消路径草稿，不能把未提交的文本继续显示成当前目录。
         let currentPath = session.files.path
         XCTAssertTrue(window.makeFirstResponder(path))
@@ -108,6 +119,36 @@ final class WorkspaceUIIntegrationTests: XCTestCase {
         XCTAssertEqual(session.files.path, currentPath, "取消草稿不得触发导航")
         XCTAssertTrue(session.terminal === terminal)
         XCTAssertEqual(session.files.connectionID, connection)
+
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: destination)
+        XCTAssertTrue(window.makeFirstResponder(path))
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let submitEditor = try XCTUnwrap(path.currentEditor() as? NSTextView)
+        submitEditor.selectAll(nil)
+        submitEditor.insertText(alias.path, replacementRange: NSRange(location: NSNotFound, length: 0))
+        let submit = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                                   windowNumber: window.windowNumber, context: nil,
+                                                   characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        window.sendEvent(submit)
+        for _ in 0..<150 {
+            if !session.files.isLoading && path.stringValue == destination.path { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(path.stringValue, destination.path, "提交别名后，即使真实目录没变，也应同步规范路径")
+
+        submitEditor.selectAll(nil)
+        submitEditor.insertText(root.path, replacementRange: NSRange(location: NSNotFound, length: 0))
+        window.sendEvent(submit)
+        submitEditor.selectAll(nil)
+        submitEditor.insertText("/newer-draft", replacementRange: NSRange(location: NSNotFound, length: 0))
+        for _ in 0..<150 {
+            if !session.files.isLoading && session.files.path == root.path { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(session.files.path, root.path)
+        XCTAssertEqual(path.stringValue, "/newer-draft", "已提交请求的回调不能覆盖用户随后继续输入的内容")
     }
 
     @MainActor

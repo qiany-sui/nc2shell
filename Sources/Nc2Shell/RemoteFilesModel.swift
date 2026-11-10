@@ -47,6 +47,7 @@ final class RemoteFilesModel: ObservableObject {
     private var pendingPath: String?
     private var pendingFollowsTerminal = false
     private var loadingPath: String?
+    private var validatedRequestedPath: String?
     private var loadingFollowsTerminal = false
     private var interruptedOperation: UUID?
     private var cancelRequested = false
@@ -232,6 +233,7 @@ final class RemoteFilesModel: ObservableObject {
         isManagingFiles = false
         locationValidated = false; following = false; reportedPath = nil; followSuspension = nil
         files = []; path = ""; pendingPath = nil; pendingFollowsTerminal = false; loadingPath = nil; message = nil
+        validatedRequestedPath = nil
         navigation.reset()
     }
 
@@ -239,7 +241,10 @@ final class RemoteFilesModel: ObservableObject {
         guard followSuspension == nil else { return }
         reportedPath = path
         if following, isManagingFiles { pendingPath = path; pendingFollowsTerminal = true; return }
-        if following, loadingPath != path, self.path != path || !locationValidated { navigate(path, followed: true) }
+        // Shell 可能报告符号链接路径；本次成功列表已确认它与当前规范路径对应。
+        if following, loadingPath != path, (self.path != path && validatedRequestedPath != path) || !locationValidated {
+            navigate(path, followed: true)
+        }
     }
 
     func suspendFollowing(reason: String) {
@@ -307,6 +312,7 @@ final class RemoteFilesModel: ObservableObject {
         listingClient?.cancel()
         let id = UUID(); listingOperation = id
         loadingPath = requested; loadingFollowsTerminal = followed
+        validatedRequestedPath = nil
         isLoading = true; locationValidated = false; error = nil; files = []
         Task {
             guard listingOperation == id, isConnected else { return }
@@ -314,6 +320,7 @@ final class RemoteFilesModel: ObservableObject {
                 let client = try makeClient(); listingClient = client
                 let result = try await client.list(path: requested)
                 guard listingOperation == id else { return }
+                validatedRequestedPath = requested
                 path = result.path; files = result.files; locationValidated = true
                 navigation.commit(result.path, target: historyTarget)
             } catch {

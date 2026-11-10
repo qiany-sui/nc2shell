@@ -5,18 +5,17 @@ import SwiftTerm
 struct TerminalWorkspaceView: View {
     @ObservedObject var model: AppModel
     let workspace: TerminalWorkspace
-    @State private var fileWidth: CGFloat = 350
     @Binding var showFiles: Bool
     let showTransfers: () -> Void
 
     var body: some View {
         GeometryReader { geometry in
             let minimumTerminal: CGFloat = workspace.secondarySessionID != nil && workspace.axis == .columns ? 480 : 300
-            let panelWidth = showFiles ? min(fileWidth, max(300, geometry.size.width - minimumTerminal - 1)) : 0
+            let panelWidth = showFiles ? min(model.filePanelWidth, max(300, geometry.size.width - minimumTerminal - 1)) : 0
             HStack(spacing: 0) {
                 panes.frame(minWidth: minimumTerminal, maxWidth: .infinity)
                 if showFiles {
-                    WorkspaceDivider(width: $fileWidth, limits: 300...550, trailing: true, label: "调整文件面板宽度")
+                    WorkspaceDivider(width: $model.filePanelWidth, limits: 300...550, trailing: true, label: "调整文件面板宽度")
                 }
                 if let focused = model.selectedSession {
                     // 收起只改变宽度，保留列表选择与正在编辑的路径。

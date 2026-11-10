@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
     }
     @Published var sidebarVisible = true
     @Published var filesVisible = true
+    @Published var filePanelWidth: CGFloat = 350
     @Published private(set) var preferences = TerminalPreferences()
     @Published private(set) var settingsError: String?
     @Published var selectedProfileID: UUID?

@@ -238,6 +238,7 @@ struct TerminalSettingsView: View {
                     Button { draft.fontSize = max(10, draft.fontSize - 1) } label: { Image(systemName: "minus").frame(width: 36, height: 34) }
                         .disabled(draft.fontSize <= 10).accessibilityLabel("减小默认字号")
                     Text("\(Int(draft.fontSize)) pt").monospacedDigit().frame(width: 56).accessibilityLabel("默认字号")
+                        .accessibilityValue("\(Int(draft.fontSize)) 点")
                     Button { draft.fontSize = min(28, draft.fontSize + 1) } label: { Image(systemName: "plus").frame(width: 36, height: 34) }
                         .disabled(draft.fontSize >= 28).accessibilityLabel("增大默认字号")
                 }.buttonStyle(.plain)

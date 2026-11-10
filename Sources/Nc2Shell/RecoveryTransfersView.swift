@@ -50,7 +50,7 @@ struct RecoveryTransfersView: View {
     private func recoveryRow(_ record: RecoverableTransfer) -> some View {
         let profile = savedProfile(for: record)
         let session = connectedSession(for: record)
-        let connecting = model.sessions.contains { record.account.matches($0.profile) && $0.state == .connecting }
+        let connecting = connectionInProgress(for: record)
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: record.direction == .upload ? "arrow.up.doc" : "arrow.down.doc")
@@ -67,8 +67,13 @@ struct RecoveryTransfersView: View {
                         if let error = session.files.error { model.errorMessage = error }
                         else { cleanupSession = session }
                     }.disabled(confirmingID != nil || !session.files.canTransfer)
-                } else if let profile {
-                    Button(connecting ? "正在连接…" : "连接服务器") { model.connect(profile) }
+                } else if profile != nil {
+                    Button(connecting ? "正在连接…" : "连接服务器") {
+                        // 点击时重查，避免界面刷新前与已有认证或自动重连重复建连。
+                        guard !connectionInProgress(for: record), connectedSession(for: record) == nil,
+                              let profile = savedProfile(for: record) else { return }
+                        model.connect(profile)
+                    }
                         .disabled(connecting)
                 }
                 Button("移除记录…", role: .destructive) { remove(record) }
@@ -105,6 +110,12 @@ struct RecoveryTransfersView: View {
 
     private func savedProfile(for record: RecoverableTransfer) -> ConnectionProfile? {
         model.profiles.first { record.account.matches($0) }
+    }
+
+    private func connectionInProgress(for record: RecoverableTransfer) -> Bool {
+        model.sessions.contains {
+            record.account.matches($0.profile) && ($0.state == .connecting || $0.state == .reconnecting)
+        }
     }
 
     private func connectedSession(for record: RecoverableTransfer) -> TerminalSession? {
